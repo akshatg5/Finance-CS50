@@ -8,6 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 import requests
+import psycopg2
 
 load_dotenv()
 
