@@ -7,8 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
 from dotenv import load_dotenv
 from flask_migrate import Migrate
-
-from helpers import lookup, usd
+import requests
 
 load_dotenv()
 
@@ -25,6 +24,36 @@ migrate = Migrate(app, db)
 # JWT configuration
 app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
 jwt = JWTManager(app)
+
+# Helper functions (previously in helpers.py)
+FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
+
+def lookup(symbol):
+    """Look up stock quote for symbol using Finnhub."""
+    symbol = symbol.upper()
+    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "error" in data:
+            return None
+        
+        price = round(data["c"], 2)  # Current price
+        return {
+            "name": symbol,
+            "price": price,
+            "symbol": symbol
+        }
+    
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        return None
+
+def usd(value):
+    """Format value as USD."""
+    return f"${value:,.2f}"
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
