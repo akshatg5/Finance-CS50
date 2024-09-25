@@ -8,3 +8,4 @@ psycopg2-binary==2.9.9
 python-dotenv==0.19.2
 Werkzeug==3.0.4
 requests
+psycopg2
