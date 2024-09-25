@@ -95,7 +95,7 @@ def index():
     stocks = db.session.query(Transaction.ticker, Transaction.name, Transaction.price, 
                               db.func.sum(Transaction.shares).label('totalshares'))\
         .filter_by(user_id=user_id)\
-        .group_by(Transaction.ticker, Transaction.name, Transaction.price)\
+        .group_by(Transaction.ticker, Transaction.name)\
         .all()
     
     user = User.query.get(user_id)
