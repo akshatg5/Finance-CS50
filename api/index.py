@@ -92,10 +92,12 @@ def index():
     """Show portfolio of stocks"""
     user_id = get_jwt_identity()
     
-    stocks = db.session.query(Transaction.ticker, Transaction.name, Transaction.price, 
-                              db.func.sum(Transaction.shares).label('totalshares'))\
+    stocks = db.session.query(Transaction.ticker, Transaction.name, 
+                              db.func.sum(Transaction.shares).label('totalshares'),
+                              db.func.avg(Transaction.price).label('avg_price'))\
         .filter_by(user_id=user_id)\
         .group_by(Transaction.ticker, Transaction.name)\
+        .having(db.func.sum(Transaction.shares) > 0)\
         .all()
     
     user = User.query.get(user_id)
@@ -104,13 +106,16 @@ def index():
 
     stocks_list = []
     for stock in stocks:
+        current_price = lookup(stock.ticker)['price'] if lookup(stock.ticker) else stock.avg_price
+        stock_value = current_price * stock.totalshares
         stock_dict = {
             'ticker': stock.ticker,
             'name': stock.name,
-            'price': stock.price,
-            'totalshares': stock.totalshares
+            'price': current_price,
+            'totalshares': stock.totalshares,
+            'total_value': stock_value
         }
-        total += stock.price * stock.totalshares
+        total += stock_value
         stocks_list.append(stock_dict)
 
     return jsonify({"stocks": stocks_list, "cash": cash, "total": total})
