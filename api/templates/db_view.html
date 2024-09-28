@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database View</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Users</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Cash</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.cash }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h1>Transactions</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>User ID</th>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Shares</th>
+            <th>Price</th>
+            <th>Type</th>
+            <th>Time</th>
+        </tr>
+        {% for transaction in transactions %}
+        <tr>
+            <td>{{ transaction.id }}</td>
+            <td>{{ transaction.user_id }}</td>
+            <td>{{ transaction.ticker }}</td>
+            <td>{{ transaction.name }}</td>
+            <td>{{ transaction.shares }}</td>
+            <td>{{ transaction.price }}</td>
+            <td>{{ transaction.type }}</td>
+            <td>{{ transaction.time }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

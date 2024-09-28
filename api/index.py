@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request,render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
@@ -7,8 +7,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
 from dotenv import load_dotenv
 from flask_migrate import Migrate
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
 import requests
 import psycopg2
+
+from models import db,User,Transaction
+from helpers import lookup,usd
 
 load_dotenv()
 
@@ -18,60 +23,17 @@ CORS(app)
 DATABASE_URI = os.getenv('DATABASE_URI')
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+
+db.init_app(app)
 
 migrate = Migrate(app, db)
-
 # JWT configuration
 app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
 jwt = JWTManager(app)
 
-# Helper functions (previously in helpers.py)
-FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
-
-def lookup(symbol):
-    """Look up stock quote for symbol using Finnhub."""
-    symbol = symbol.upper()
-    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-    
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        
-        if "error" in data:
-            return None
-        
-        price = round(data["c"], 2)  # Current price
-        return {
-            "name": symbol,
-            "price": price,
-            "symbol": symbol
-        }
-    
-    except (requests.RequestException, ValueError, KeyError, IndexError):
-        return None
-
-def usd(value):
-    """Format value as USD."""
-    return f"${value:,.2f}"
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    hash = db.Column(db.String(255), nullable=False)
-    cash = db.Column(db.Float, default=10000.00)
-
-class Transaction(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    ticker = db.Column(db.String(10), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    shares = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=False)
-    type = db.Column(db.String(4), nullable=False)
-    time = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-
+admin = Admin(app,name='DBView',template_mode='bootstrap3')
+admin.add_view(ModelView(User,db.session))
+admin.add_view(ModelView(Transaction,db.session))
 
 @app.after_request
 def after_request(response):
@@ -80,6 +42,12 @@ def after_request(response):
     response.headers["Expires"] = 0
     response.headers["Pragma"] = "no-cache"
     return response
+
+@app.route('/dbview')
+def db_view() :
+    users = User.query.all()
+    transactions = Transaction.query.all()
+    return render_template('db_view.html',users=users,transactions=transactions)
 
 @app.route("/", methods=["GET"])
 def serverCheck():
@@ -92,13 +60,15 @@ def index():
     """Show portfolio of stocks"""
     user_id = get_jwt_identity()
     
-    stocks = db.session.query(Transaction.ticker, Transaction.name, 
-                              db.func.sum(Transaction.shares).label('totalshares'),
-                              db.func.avg(Transaction.price).label('avg_price'))\
-        .filter_by(user_id=user_id)\
-        .group_by(Transaction.ticker, Transaction.name)\
-        .having(db.func.sum(Transaction.shares) > 0)\
-        .all()
+    stocks = db.session.query(
+        Transaction.ticker,
+        Transaction.name,
+        db.func.sum(Transaction.shares).label('totalshares'),
+        db.func.sum(Transaction.shares * Transaction.price).label('total_cost')
+    ).filter_by(user_id=user_id)\
+        .group_by(Transaction.ticker,Transaction.name)\
+            .having(db.func.sum(Transaction.shares) > 0)\
+                .all()
     
     user = User.query.get(user_id)
     cash = user.cash
@@ -106,16 +76,18 @@ def index():
 
     stocks_list = []
     for stock in stocks:
-        current_price = lookup(stock.ticker)['price'] if lookup(stock.ticker) else stock.avg_price
-        stock_value = current_price * stock.totalshares
+        current_price = lookup(stock.ticker)['price'] if lookup(stock.ticker) else 0
+        avg_purchase_price = stock.total_cost / stock.totalshares if stock.totalshares > 0 else 0
+        current_value = current_price * stock.totalshares
         stock_dict = {
             'ticker': stock.ticker,
             'name': stock.name,
-            'price': current_price,
+            'current_price': current_price,
+            'avg_purcase_price' : avg_purchase_price,
             'totalshares': stock.totalshares,
-            'total_value': stock_value
+            'current_value': current_value
         }
-        total += stock_value
+        total += current_value
         stocks_list.append(stock_dict)
 
     return jsonify({"stocks": stocks_list, "cash": cash, "total": total})
