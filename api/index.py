@@ -12,8 +12,8 @@ from flask_admin.contrib.sqla import ModelView
 import requests
 import psycopg2
 
-from models import db,User,Transaction
-from helpers import lookup,usd
+from .models import db,User,Transaction
+from .helpers import lookup,usd
 
 load_dotenv()
 

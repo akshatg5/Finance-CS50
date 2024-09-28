@@ -10,5 +10,3 @@ Werkzeug==3.0.4
 requests
 psycopg2-binary
 flask_admin
-models
-helpers
