@@ -17,12 +17,14 @@
             <th>ID</th>
             <th>Username</th>
             <th>Cash</th>
+            <th>Nationality</th>
         </tr>
         {% for user in users %}
         <tr>
             <td>{{ user.id }}</td>
             <td>{{ user.username }}</td>
             <td>{{ user.cash }}</td>
+            <td>{{ user.nationality }}</td>
         </tr>
         {% endfor %}
     </table>

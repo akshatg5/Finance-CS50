@@ -8,6 +8,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     hash = db.Column(db.String(255), nullable=False)
     cash = db.Column(db.Float, default=10000.00)
+    nationality = db.Column(db.String(100),nullable=True)
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)

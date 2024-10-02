@@ -222,3 +222,32 @@ def sell():
     db.session.commit()
 
     return jsonify({"message": "Stock sold successfully"})
+
+@app.route("/api/profile",methods=["GET"])
+@jwt_required()
+def profile():
+    user_id = get_jwt_identity()
+    profile = User.query.get(user_id)
+    username = profile.username
+    cash = profile.cash
+    nationality = profile.nationality
+    print(username,cash)
+    return jsonify({"username" : username,"cash":cash,"nationality" : nationality})
+
+@app.route('/api/selectnation',methods=["POST"])
+@jwt_required()
+def selectNation() : 
+    user_id = get_jwt_identity()
+    nationality = request.json.get("nation")
+    if not nationality:
+        return jsonify({"error" : "Nationality not provided"}),400
+    if nationality not in ["USA", "India"]:
+        return jsonify({"error": "Invalid nationality. Must be 'USA' or 'India'"}), 400
+
+    user = User.query.get(user_id)
+    if not user : 
+        return jsonify({"error" : "Invalid User"}),404
+    user.nationality = nationality
+    db.session.commit()
+    return jsonify({"message" : "Nationality added","nationality" : nationality}),200
+        
