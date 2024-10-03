@@ -9,11 +9,14 @@ from dotenv import load_dotenv
 from flask_migrate import Migrate
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
+from datetime import datetime, timedelta
+from sqlalchemy import func
 import requests
 import psycopg2
 
 from .models import db,User,Transaction
 from .helpers import lookup,usd
+from .stock import get_stock_data
 
 load_dotenv()
 
@@ -191,6 +194,25 @@ def register():
 
     return jsonify({"message": "User registered successfully!"}), 201
 
+@app.route("/api/currentstocks",methods=["GET"])
+@jwt_required()
+def currentStocks() :
+    user_id = get_jwt_identity()
+    holdings = db.session.query(
+        Transaction.ticker,
+        Transaction.name,
+        func.sum(Transaction.shares).label('total_shares')
+    ).filter(Transaction.user_id == user_id).group_by(Transaction.ticker,Transaction.name).having(func.sum(Transaction.shares) > 0 ).all()
+    result = []
+    for holding in holdings : 
+        result.append({
+            "ticker" : holding.ticker,
+            "name" : holding.name,
+            "total_shares" : holding.total_shares
+        })
+        
+    return jsonify(result)
+        
 @app.route("/api/sell", methods=["POST"])
 @jwt_required()
 def sell():
@@ -231,7 +253,6 @@ def profile():
     username = profile.username
     cash = profile.cash
     nationality = profile.nationality
-    print(username,cash)
     return jsonify({"username" : username,"cash":cash,"nationality" : nationality})
 
 @app.route('/api/selectnation',methods=["POST"])
@@ -251,3 +272,15 @@ def selectNation() :
     db.session.commit()
     return jsonify({"message" : "Nationality added","nationality" : nationality}),200
         
+
+@app.route('/api/stock_data/<symbol>',methods=["GET"])
+@jwt_required()
+def stock_data(symbol):
+    try:
+        to_date = datetime.now().strftime('%Y-%m-%d')
+        from_date = (datetime.now() - timedelta(days=100)).strftime('%Y-%m-%d')
+
+        data = get_stock_data(symbol, from_date, to_date)
+        return jsonify([vars(item) for item in data])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
