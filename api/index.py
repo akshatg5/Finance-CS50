@@ -11,6 +11,8 @@ from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import google.generativeai as genai
+import json
 import requests
 import psycopg2
 
@@ -22,6 +24,8 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 DATABASE_URI = os.getenv('DATABASE_URI')
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
@@ -284,3 +288,79 @@ def stock_data(symbol):
         return jsonify([vars(item) for item in data])
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    
+from flask import jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+import json
+import google.generativeai as genai
+import re
+
+@app.route('/api/analyze', methods=["POST"])
+@jwt_required()
+def analyze_stock():
+    user_id = get_jwt_identity()
+    data = request.json
+    symbol = data.get("symbol", "").upper()
+    shares = data.get("shares")
+    avg_price = data.get("avg_price")
+    ltp = data.get("ltp")
+    
+    if not all([symbol, shares, avg_price, ltp]):
+        return jsonify({"error": "Missing requirements"}), 400
+
+    prompt = f"""You are a long term capital market financial advisor.
+    Follow this format for the response : {{ "pros": {{"1": "Point 1", "2": "Point 2"}}, "cons": {{"1": "Point 1", "2": "Point 2"}}, "suggestion": "Your suggestion about how to approach buying and selling shares of {symbol} in the current market scenario." }} and make sure the response is always in this format, no need to incldue any markdown, title enhancements,bold styling,ASCII characters in the resposne. Normal respnonse in the above mentioned format.
+    The user has {shares} shares of {symbol} at an average price of ${avg_price}, currently trading at ${ltp}. Given the current dynamics of the company, the industry, the socio-economic situations, the way this industry is growing and how the stock has performed in the last few years, is this a good investment or not? Provide 2 pros and 2 cons in a JSON format: . Do not include any markdown formatting or code blocks in your response.
+    1. Ensure this is in a json response. 
+    2. Fetch the latest new headlines for the {symbol} and then form the suggestions.
+    """
+    
+    try:
+        model = genai.GenerativeModel('models/gemini-pro')
+        response = model.generate_content(prompt)
+        
+        # Remove any code block formatting, leading/trailing whitespace, and non-ASCII characters
+        json_string = re.sub(r'^```[\s\S]*\n|\n```$', '', response.text.strip())
+        json_string = re.sub(r'[^\x00-\x7F]+', '', json_string)
+        
+        # Parse the JSON
+        analysis = json.loads(json_string)
+        
+        return jsonify(analysis), 200
+    except json.JSONDecodeError as e:
+        # If JSON parsing fails, attempt to extract JSON from the response
+        match = re.search(r'\{.*\}', json_string, re.DOTALL)
+        if match:
+            try:
+                analysis = json.loads(match.group())
+                return jsonify(analysis), 200
+            except:
+                pass
+        
+        # If extraction fails, return a formatted JSON response with the raw text
+        return jsonify({
+            "pros": {
+                "1": "Unable to parse AI response",
+                "2": "Please check the raw response for details"
+            },
+            "cons": {
+                "1": "AI response format error",
+                "2": "Manual intervention may be required"
+            },
+            "suggestion": "The AI response could not be properly parsed. Please review the raw response and consider regenerating the analysis.",
+            "raw_response": json_string
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "pros": {
+                "1": "Error occurred during analysis",
+                "2": "System is still operational"
+            },
+            "cons": {
+                "1": "Unable to provide accurate analysis at this time",
+                "2": "Manual intervention may be required"
+            },
+            "suggestion": "An unexpected error occurred. Please try again later or contact support if the issue persists.",
+            "error": str(e)
+        }), 200
+    
