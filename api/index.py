@@ -15,10 +15,14 @@ import google.generativeai as genai
 import json
 import requests
 import psycopg2
+import json
+import google.generativeai as genai
+import re
 
 from .models import db,User,Transaction
 from .helpers import lookup,usd
 from .stock import get_stock_data
+from .fundamentals import get_fundamentals_data,get_news_data
 
 load_dotenv()
 
@@ -166,6 +170,7 @@ def login():
     access_token = create_access_token(identity=user.id)
     return jsonify(access_token=access_token)
 
+
 @app.route("/api/quote", methods=["POST"])
 def quote():
     """Get stock quote."""
@@ -289,12 +294,6 @@ def stock_data(symbol):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     
-from flask import jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity
-import json
-import google.generativeai as genai
-import re
-
 @app.route('/api/analyze', methods=["POST"])
 @jwt_required()
 def analyze_stock():
@@ -318,25 +317,19 @@ def analyze_stock():
     try:
         model = genai.GenerativeModel('models/gemini-pro')
         response = model.generate_content(prompt)
-        
-        # Remove any code block formatting, leading/trailing whitespace, and non-ASCII characters
         json_string = re.sub(r'^```[\s\S]*\n|\n```$', '', response.text.strip())
         json_string = re.sub(r'[^\x00-\x7F]+', '', json_string)
-        
-        # Parse the JSON
         analysis = json.loads(json_string)
         
         return jsonify(analysis), 200
     except json.JSONDecodeError as e:
-        # If JSON parsing fails, attempt to extract JSON from the response
         match = re.search(r'\{.*\}', json_string, re.DOTALL)
         if match:
             try:
                 analysis = json.loads(match.group())
                 return jsonify(analysis), 200
             except:
-                pass
-        
+                pass        
         # If extraction fails, return a formatted JSON response with the raw text
         return jsonify({
             "pros": {
@@ -363,4 +356,22 @@ def analyze_stock():
             "suggestion": "An unexpected error occurred. Please try again later or contact support if the issue persists.",
             "error": str(e)
         }), 200
+    
+@app.route('/api/fundamentals/<symbol>',methods=["GET"])
+@jwt_required()
+def get_fundamentals(symbol) :
+    try :
+        data = get_fundamentals_data(symbol)
+        return jsonify(data)
+    except ValueError as e : 
+        return jsonify({"error" : str(e)}),400
+    
+@app.route('/api/news/<symbol>',methods=["GET"])
+@jwt_required()
+def get_news(symbol):
+    try : 
+        data = get_news_data(symbol)
+        return jsonify(data)
+    except ValueError as e : 
+         return jsonify({"error" : str(e)}),400
     
