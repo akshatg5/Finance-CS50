@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request,render_template
+from flask import Flask, jsonify, request,render_template,Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
@@ -11,6 +11,7 @@ from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from functools import wraps
 import google.generativeai as genai
 import json
 import requests
@@ -42,6 +43,9 @@ migrate = Migrate(app, db)
 app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
 jwt = JWTManager(app)
 
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME',"admin")
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD',"password")
+
 admin = Admin(app,name='DBView',template_mode='bootstrap3')
 admin.add_view(ModelView(User,db.session))
 admin.add_view(ModelView(Transaction,db.session))
@@ -54,7 +58,27 @@ def after_request(response):
     response.headers["Pragma"] = "no-cache"
     return response
 
+def check_auth(username,password):
+    return username == ADMIN_USERNAME and password == ADMIN_PASSWORD
+
+def authenticate():
+    return Response(
+        'Could not verify your access level for that URL.\n'
+        'You have to login with proper credentials', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    )
+    
+def requires_auth(f) :
+    @wraps(f)
+    def decorated(*args,**kwargs) :
+        auth = request.authorization
+        if not auth or not check_auth(auth.username,auth.password):
+            return authenticate()
+        return f(*args,**kwargs)
+    return decorated
+
 @app.route('/dbview')
+@requires_auth
 def db_view() :
     users = User.query.all()
     transactions = Transaction.query.all()
