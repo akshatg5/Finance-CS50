@@ -1,28 +1,88 @@
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fexamples%2Ftree%2Fmain%2Fpython%2Fflask3&demo-title=Flask%203%20%2B%20Vercel&demo-description=Use%20Flask%203%20on%20Vercel%20with%20Serverless%20Functions%20using%20the%20Python%20Runtime.&demo-url=https%3A%2F%2Fflask3-python-template.vercel.app%2F&demo-image=https://assets.vercel.com/image/upload/v1669994156/random/flask.png)
+# Stock Portfolio Backend
 
-# Flask + Vercel
+This is the backend server for a stock portfolio management application. It provides APIs for user authentication, stock trading, portfolio management, and stock analysis using AI.
 
-This example shows how to use Flask 3 on Vercel with Serverless Functions using the [Python Runtime](https://vercel.com/docs/concepts/functions/serverless-functions/runtimes/python).
+## Features
 
-## Demo
+- User registration and authentication
+- Real-time stock quotes
+- Buy and sell stocks
+- View portfolio and transaction history
+- AI-powered stock analysis using Google's Gemini API
+- Database integration for persistent storage
 
-https://flask-python-template.vercel.app/
+## Technologies Used
 
-## How it Works
+- Python 3.8+
+- Flask
+- Google Generative AI (Gemini)
+- PostgreSQL
 
-This example uses the Web Server Gateway Interface (WSGI) with Flask to enable handling requests on Vercel with Serverless Functions.
+## Prerequisites
 
-## Running Locally
+Before you begin, ensure you have met the following requirements:
 
-```bash
-npm i -g vercel
-vercel dev
-```
+- Python 3.8 or higher installed
+- pip (Python package manager)
+- PostgreSQL database
 
-Your Flask application is now available at `http://localhost:3000`.
+## Setting Up Locally
 
-## One-Click Deploy
+Follow these steps to set up the project locally:
 
-Deploy the example using [Vercel](https://vercel.com?utm_source=github&utm_medium=readme&utm_campaign=vercel-examples):
+1. Clone the repository:
+   ```
+   git clone https://github.com/akshatg5/Finance-CS50
+   ```
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fexamples%2Ftree%2Fmain%2Fpython%2Fflask3&demo-title=Flask%203%20%2B%20Vercel&demo-description=Use%20Flask%203%20on%20Vercel%20with%20Serverless%20Functions%20using%20the%20Python%20Runtime.&demo-url=https%3A%2F%2Fflask3-python-template.vercel.app%2F&demo-image=https://assets.vercel.com/image/upload/v1669994156/random/flask.png)
+2. Create a virtual environment (recommended):
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   ```
+
+3. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+4. Set up the environment variables:
+   Create a `.env` file in the root directory with the following content:
+   ```
+   JWT_SECRET=your_jwt_secret_here
+   FINNHUB_API_KEY=your_finnhub_api_key_here
+   DATABASE_URI=your_database_uri_here
+   POLYGON_API_KEY=your_polygon_api_key_here
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+   Replace the placeholder values with your actual API keys and database URI.
+
+5. Initialize the database:
+   ```
+   flask db init
+   flask db migrate
+   flask db upgrade
+   ```
+
+6. Run the application:
+   ```
+   flask --app api/index.py run
+   ```
+
+The server should now be running on http://127.0.0.1:5000
+
+## Contributing
+
+Contributions to the Litekite Backend are welcome. Please follow these steps:
+
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/featureName`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'feat/fix:Add/fix this feature'`)
+5. Push to the branch (`git push origin feature/featureName`)
+6. Open a Pull Request
+
+
+## Contact
+
+If you have any questions or feedback, please reach out to [Me](https://x.com/AkshatGirdhar2).
