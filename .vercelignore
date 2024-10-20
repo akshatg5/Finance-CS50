@@ -1,7 +1,8 @@
 *.pyc
 __pycache__
 venv
+venv/
 .vscode
 tests
 *.log
-migrations/
+migrations/venv
