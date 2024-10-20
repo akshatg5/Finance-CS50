@@ -180,26 +180,22 @@ def get_price_for_stock(symbol: str):
         print(f"Error fetching the stock data: {e}")
         raise ValueError(f"Failed to fetch stock data: {str(e)}")
     
-def search_indian_stocks(query:str,limit : int = 10) -> list[dict] :
-    try :
-         # Load all Indian stocks data
-        url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-        df = pd.read_csv(url)
+# Load the CSV file once during initialization
+csv_path = os.path.join(os.path.dirname(__file__), 'EQUITY_L.csv')
+df = pd.read_csv(csv_path)
 
-        mask = df['SYMBOL'].str.contains(query,case=False) | df['NAME OF COMPANY'].str.contains(query,case=False)
+def search_indian_stocks(query: str, limit: int = 10) -> list[dict]:
+    try:
+        mask = df['SYMBOL'].str.contains(query, case=False) | df['NAME OF COMPANY'].str.contains(query, case=False)
         results = df[mask].head(limit)
-        stocks = []
-        
-        for _,row in results.iterrows():
-            symbol = row['SYMBOL'] + '.NS'
-            try :
-                stocks.append({
-                    'symbol': symbol,
-                    'name': row['NAME OF COMPANY'],
-                })
-            except Exception as e :
-                print(f"Error fetching data for {symbol} : {e}")
-        return stocks        
-    except Exception as e: 
-        print(f"Error searching for stocks : {e}")
+        stocks = [
+            {
+                'symbol': f"{row['SYMBOL']}.NS",
+                'name': row['NAME OF COMPANY']
+            }
+            for _, row in results.iterrows()
+        ]
+        return stocks
+    except Exception as e:
+        print(f"Error searching for stocks: {e}")
         return []
