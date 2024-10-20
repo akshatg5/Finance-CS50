@@ -13,3 +13,4 @@ Requests==2.32.3
 SQLAlchemy==2.0.35
 Werkzeug==3.0.4
 yfinance==0.2.44
+google-generativeai
