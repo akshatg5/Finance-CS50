@@ -3,14 +3,14 @@
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb" }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.py",
-      "config": { "maxLambdaSize": "15mb" }
+      "dest": "api/index.py"
     }
   ],
   "env": {
