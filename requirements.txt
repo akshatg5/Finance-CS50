@@ -11,3 +11,5 @@ requests
 psycopg2-binary
 flask_admin
 google-generativeai
+pandas
+yfinance

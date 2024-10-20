@@ -1,6 +1,7 @@
 import os
 import requests
 from dotenv import load_dotenv
+from functools import lru_cache
 
 load_dotenv()
 

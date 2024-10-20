@@ -20,10 +20,11 @@ import json
 import google.generativeai as genai
 import re
 
-from .models import db,User,Transaction
+from .models import db,User,Transaction,IndianStockTransactions
 from .helpers import lookup,usd
 from .stock import get_stock_data
 from .fundamentals import get_fundamentals_data,get_news_data
+from .indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
 
 load_dotenv()
 
@@ -82,7 +83,8 @@ def requires_auth(f) :
 def db_view() :
     users = User.query.all()
     transactions = Transaction.query.all()
-    return render_template('db_view.html',users=users,transactions=transactions)
+    indiantransactions = IndianStockTransactions.query.all()
+    return render_template('db_view.html',users=users,transactions=transactions,indiantransactions=indiantransactions)
 
 @app.route("/", methods=["GET"])
 def serverCheck():
@@ -127,6 +129,54 @@ def index():
 
     return jsonify({"stocks": stocks_list, "cash": cash, "total": total})
 
+@app.route("/api/indianportfolio", methods=["GET"])
+@jwt_required()
+def indianPortfolio():
+    """Indian portfolio"""
+    user_id = get_jwt_identity()
+    stocks = db.session.query(
+        IndianStockTransactions.ticker,
+        IndianStockTransactions.name,
+        db.func.sum(IndianStockTransactions.shares).label('totalIndianShares'),
+        db.func.sum(IndianStockTransactions.shares * IndianStockTransactions.price).label('total_indian_cost')  
+    ).filter_by(user_id=user_id)\
+        .group_by(IndianStockTransactions.ticker, IndianStockTransactions.name)\
+        .having(db.func.sum(IndianStockTransactions.shares) > 0)\
+        .all()
+                
+    user = User.query.get(user_id)
+    indiancash = float(user.indiancash)
+    total = indiancash
+    
+    stock_list = []
+    for stock in stocks:
+        price_info = get_price_for_stock(stock.ticker)
+        if price_info and 'price' in price_info:
+            try:
+                current_price = float(price_info['price'])
+            except ValueError:
+                # If the price is still a string with repeated values, take the first occurrence
+                current_price = float(price_info['price'].split()[0])
+        else:
+            current_price = 0.0
+        
+        totalIndianShares = float(stock.totalIndianShares)
+        avg_purchase_price = float(stock.total_indian_cost) / totalIndianShares if totalIndianShares > 0 else 0
+        current_value = current_price * totalIndianShares
+        
+        stock_dict = {
+            'ticker': stock.ticker,
+            'name': stock.name,
+            'current_price': current_price,
+            'avg_purchase_price': avg_purchase_price,
+            'totalShares': totalIndianShares,
+            'current_value': current_value
+        }
+        total += current_value
+        stock_list.append(stock_dict)
+        
+    return jsonify({"stocks": stock_list, "cash": indiancash, "total": total})
+
 @app.route("/api/balance", methods=["GET"])
 @jwt_required()
 def balance():
@@ -136,6 +186,58 @@ def balance():
     balance = user.cash
     return jsonify({"balance": balance})
 
+@app.route("/api/indianbalance", methods=["GET"])
+@jwt_required()
+def indianbalance():
+    """Get the current cash balance of the user"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    balance = user.indiancash
+    return jsonify({"indianbalance": balance})
+
+@app.route('/api/editbalances',methods=["POST"])
+@jwt_required()
+def edit_balance() :
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user :
+        return jsonify({"error" : "User not found!"}),404
+    
+    data = request.json
+    updates = {}
+
+    if 'cash'  in data : 
+        try :
+            cash_to_add = float(data['cash'])
+            if cash_to_add < 0:
+                return jsonify({"error" : "Balance cannot be negative"})
+            user.cash += cash_to_add
+            updates['US Balance Added'] = cash_to_add
+            updates['US Balance'] = user.cash
+        except ValueError as e :
+            return jsonify({"error" : str(e)}),400
+        
+    if 'indiancash' in data : 
+        try :
+            indiancash_toadd = float(data['indiancash'])
+            if indiancash_toadd < 0:
+                return jsonify({"error" : "Balance cannot be negative"}),400
+            user.indiancash += indiancash_toadd
+            updates['Indian Balance added'] = indiancash_toadd
+            updates['New Indian Balance'] = user.indiancash 
+        except ValueError as e : 
+            return jsonify({"error" : str(e)}),400
+    
+    if not updates :
+        return jsonify({"error" : "No Valid balance updates provided!"}),400
+        
+    try : 
+        db.session.commit()
+        return jsonify(updates),200
+    except Exception as e :
+        db.session.rollback()
+        return jsonify({"error" : "An error occured while updating the balance!"})    
+        
 @app.route("/api/buy", methods=["POST"])
 @jwt_required()
 def buy():
@@ -164,12 +266,49 @@ def buy():
 
     return jsonify({"message": f"{stock['name']} Purchased successfully"})
 
+@app.route("/api/buyindianstock",methods=["POST"])
+@jwt_required()
+def buy_indian_stock():
+    user_id = get_jwt_identity()
+    symbol = request.json.get("symbol","").upper()
+    shares = request.json.get("shares",0)
+    
+    if not symbol or shares <= 0:
+        return jsonify({"error" : "Invalid symbol or shares"}),400
+    stock = get_price_for_stock(symbol)
+    if not stock:
+        return jsonify({"Error" : "Invalid stock symbol"}),400
+    user = User.query.get(user_id)
+    total_price = float(stock['price']) * float(shares)
+    if (total_price) > user.indiancash :
+        return jsonify({"error" : "Insufficient Funds"}),400
+    user.indiancash -= total_price
+    new_transaction = IndianStockTransactions(user_id=user_id,ticker=symbol.split('.')[0],name=stock['symbol'].split('.')[0],
+                                                shares=shares,price=stock['price'],type="BUY")
+    db.session.add(new_transaction)
+    db.session.commit()
+    return jsonify({"message": f"{stock['symbol']} Purchase Successful!"})
+    
 @app.route("/api/history")
 @jwt_required()
 def history():
     """Show history of transactions"""
     user_id = get_jwt_identity()
     transactions = Transaction.query.filter_by(user_id=user_id).all()
+    return jsonify([{
+        'type': t.type,
+        'ticker': t.ticker,
+        'price': t.price,
+        'shares': t.shares,
+        'time': t.time
+    } for t in transactions])
+    
+@app.route("/api/indianstockhistory")
+@jwt_required()
+def indianstockhistory():
+    """Show history of transactions"""
+    user_id = get_jwt_identity()
+    transactions = IndianStockTransactions.query.filter_by(user_id=user_id).all()
     return jsonify([{
         'type': t.type,
         'ticker': t.ticker,
@@ -194,7 +333,6 @@ def login():
     access_token = create_access_token(identity=user.id)
     return jsonify(access_token=access_token)
 
-
 @app.route("/api/quote", methods=["POST"])
 def quote():
     """Get stock quote."""
@@ -208,6 +346,16 @@ def quote():
     
     return jsonify(stock_quote)
 
+@app.route("/api/indianquote",methods=["POST"])
+def indianquote():
+    symbol = request.json.get("symbol","")
+    if not symbol :
+        return jsonify({"error" : "Missing Symbol"}),400
+    stock_qote = get_price_for_stock(symbol)
+    if not stock_qote:
+        return jsonify({"error" : "Invalid symbol"}),400
+    return jsonify(stock_qote)
+    
 @app.route("/api/register", methods=["POST"])
 def register():
     """Register user"""
@@ -244,7 +392,26 @@ def currentStocks() :
             "total_shares" : holding.total_shares
         })
         
-    return jsonify(result)
+    return jsonify(result)        
+
+@app.route("/api/currentindianstocks",methods=["GET"])
+@jwt_required()
+def currentIndianStocks() :
+    user_id = get_jwt_identity()
+    holdings = db.session.query(
+        IndianStockTransactions.ticker,
+        IndianStockTransactions.name,
+        func.sum(IndianStockTransactions.shares).label('total_shares')
+    ).filter(IndianStockTransactions.user_id == user_id).group_by(IndianStockTransactions.ticker,IndianStockTransactions.name).having(func.sum(IndianStockTransactions.shares) > 0 ).all()
+    result = []
+    for holding in holdings : 
+        result.append({
+            "ticker" : holding.ticker,
+            "name" : holding.name,
+            "total_shares" : holding.total_shares
+        })
+        
+    return jsonify(result)        
         
 @app.route("/api/sell", methods=["POST"])
 @jwt_required()
@@ -278,6 +445,47 @@ def sell():
 
     return jsonify({"message": "Stock sold successfully"})
 
+@app.route('/api/sellindianstock',methods=['POST'])
+@jwt_required()
+def sell_indian_stock():
+    user_id = get_jwt_identity()
+    symbol = request.json.get("symbol", "")
+    shares = request.json.get("shares", 0)
+    
+    if not symbol or shares <= 0:
+        return jsonify({"error": "Invalid symbol or number of shares"}), 400
+    
+    user_shares = db.session.query(db.func.sum(IndianStockTransactions.shares))\
+        .filter_by(user_id=user_id, ticker=symbol).scalar() or 0
+    if shares > user_shares:
+        return jsonify({"error": "Not enough shares"}), 400
+    
+    stock = get_price_for_stock(symbol)
+    if not stock:
+        return jsonify({"error": "Invalid stock symbol"}), 400
+    
+    user = User.query.get(user_id)
+    
+    # Ensure price is a float and round to 2 decimal places
+    price = round(float(stock["price"]), 2)
+    total_price = round(price * shares, 2)
+    
+    # Update user's cash
+    user.cash = round(user.cash + total_price, 2)
+    
+    new_transaction = IndianStockTransactions(
+        user_id=user_id,
+        ticker=symbol.split('.')[0],
+        name=stock["symbol"].split('.')[0],
+        shares=-shares,
+        price=price,
+        type="SELL"
+    )
+    db.session.add(new_transaction)
+    db.session.commit()
+    
+    return jsonify({"message": f"{stock['symbol']} Sold Successfully"})
+
 @app.route("/api/profile",methods=["GET"])
 @jwt_required()
 def profile():
@@ -286,7 +494,8 @@ def profile():
     username = profile.username
     cash = profile.cash
     nationality = profile.nationality
-    return jsonify({"username" : username,"cash":cash,"nationality" : nationality})
+    indiancash = profile.indiancash
+    return jsonify({"username" : username,"cash":cash,"nationality" : nationality,"indiancash" : indiancash})
 
 @app.route('/api/selectnation',methods=["POST"])
 @jwt_required()
@@ -305,7 +514,6 @@ def selectNation() :
     db.session.commit()
     return jsonify({"message" : "Nationality added","nationality" : nationality}),200
         
-
 @app.route('/api/stock_data/<symbol>',methods=["GET"])
 @jwt_required()
 def stock_data(symbol):
@@ -317,6 +525,15 @@ def stock_data(symbol):
         return jsonify([vars(item) for item in data])
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    
+@app.route('/api/indian_stock_data/<symbol>',methods=["GET"])
+@jwt_required()
+def indian_stock_data(symbol):
+    try : 
+        data = get_indian_stock_graph(symbol)
+        return jsonify([vars(item) for item in data])
+    except ValueError as e:
+        return jsonify({"error" : str(e)}),400
     
 @app.route('/api/analyze', methods=["POST"])
 @jwt_required()
@@ -399,3 +616,12 @@ def get_news(symbol):
     except ValueError as e : 
          return jsonify({"error" : str(e)}),400
     
+@app.route('/api/indiansearch',methods=["GET"])
+@jwt_required()
+def search_stocks() :
+    query = request.args.get('q','')
+    limit = request.args.get('limit',10,type=int)
+    if not query:
+        return jsonify({"error" : "Search query is required"}),400
+    results = search_indian_stocks(query,limit)
+    return jsonify(results)
