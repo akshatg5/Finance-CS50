@@ -12,7 +12,6 @@ from flask_admin.contrib.sqla import ModelView
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from functools import wraps
-import google.generativeai as genai
 import requests
 import psycopg2
 import json
