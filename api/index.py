@@ -218,12 +218,12 @@ def google_callback():
             expires_delta=expires
         )
         
-        frontend_url = "http://localhost:5173/login"
+        frontend_url = "https://litekite.vercel.app/login"
         return redirect(f"{frontend_url}?token={access_token}")
     except Exception as e:
         print(f"Error in google_callback: {str(e)}")
         print(f"Full error details: {repr(e)}")
-        frontend_url = "http://localhost:5173/login"
+        frontend_url = "https://litekite.vercel.app/login"
         return redirect(f"{frontend_url}?error=1")
 
 @app.route("/api/portfolio")
