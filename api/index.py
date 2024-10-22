@@ -27,7 +27,8 @@ from indianstocks import get_indian_stock_graph,get_price_for_stock,search_india
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+CORS(app, resources={r"/api/*": {"origins": FRONTEND_URL }}, supports_credentials=True)
 DATABASE_URI = os.getenv('DATABASE_URI')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
