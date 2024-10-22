@@ -18,11 +18,11 @@ import requests
 import psycopg2
 import json
 
-from models import db,User,Transaction,IndianStockTransactions
-from helpers import lookup,usd
-from stock import get_stock_data
-from fundamentals import get_fundamentals_data,get_news_data
-from indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
+from .models import db,User,Transaction,IndianStockTransactions
+from .helpers import lookup,usd
+from .stock import get_stock_data
+from .fundamentals import get_fundamentals_data,get_news_data
+from .indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
 
 load_dotenv()
 
