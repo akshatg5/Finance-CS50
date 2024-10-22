@@ -16,17 +16,25 @@
         <tr>
             <th>ID</th>
             <th>Username</th>
+            <th>Full Name</th>
+            <th>Phone</th>
             <th>Cash</th>
             <th>Indian Cash Balance</th>
             <th>Nationality</th>
+            <th>Email</th>
+            <th>Google ID</th>
         </tr>
         {% for user in users %}
         <tr>
             <td>{{ user.id }}</td>
             <td>{{ user.username }}</td>
+            <td>{{ user.fullname }}</td>
+            <td>{{ user.phone }}</td>
             <td>{{ user.cash }}</td>
             <td>{{ user.indiancash }}</td>
             <td>{{ user.nationality }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.google_id }}</td>
         </tr>
         {% endfor %}
     </table>

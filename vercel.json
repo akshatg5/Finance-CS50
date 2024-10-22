@@ -14,6 +14,6 @@
     }
   ],
   "env": {
-    "PYTHONUNBUFFERED": "1"
+    "PYTHONPATH": "/var/task"
   }
 }

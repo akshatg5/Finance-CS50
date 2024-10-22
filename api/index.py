@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request,render_template,Response
+from flask import Flask, jsonify, request,render_template,Response,url_for,redirect,session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
@@ -12,24 +12,35 @@ from flask_admin.contrib.sqla import ModelView
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from functools import wraps
+from authlib.integrations.flask_client import OAuth
+import secrets
 import requests
 import psycopg2
 import json
 
-from .models import db,User,Transaction,IndianStockTransactions
-from .helpers import lookup,usd
-from .stock import get_stock_data
-from .fundamentals import get_fundamentals_data,get_news_data
-from .indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
+from models import db,User,Transaction,IndianStockTransactions
+from helpers import lookup,usd
+from stock import get_stock_data
+from fundamentals import get_fundamentals_data,get_news_data
+from indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
 
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
-
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+CORS(app, resources={r"/api/*": {"origins": FRONTEND_URL }}, supports_credentials=True)
 DATABASE_URI = os.getenv('DATABASE_URI')
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+SECRET_KEY = os.getenv('SECRET_KEY')
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
+app.config['GOOGLE_CLIENT_ID'] = GOOGLE_CLIENT_ID
+app.config['GOOGLE_CLIENT_SECRET'] = GOOGLE_CLIENT_SECRET
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = SECRET_KEY
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
 db.init_app(app)
 
@@ -37,6 +48,7 @@ migrate = Migrate(app, db)
 # JWT configuration
 app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
 jwt = JWTManager(app)
+oauth = OAuth(app)
 
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME',"admin")
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD',"password")
@@ -44,6 +56,17 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD',"password")
 admin = Admin(app,name='DBView',template_mode='bootstrap3')
 admin.add_view(ModelView(User,db.session))
 admin.add_view(ModelView(Transaction,db.session))
+
+google = oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={
+        'scope': 'openid email profile',
+        'prompt': 'select_account'
+    }
+)
 
 @app.after_request
 def after_request(response):
@@ -84,6 +107,124 @@ def db_view() :
 def serverCheck():
     """Server check."""
     return jsonify("Server check")
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    """Log user in"""
+    username = request.json.get("username", None)
+    password = request.json.get("password", None)
+    
+    if not username or not password:
+        return jsonify({"error": "Missing username or password"}), 401
+    
+    user = User.query.filter_by(username=username).first()
+    if not user or not check_password_hash(user.hash, password):
+        return jsonify({"error": "Invalid username or password!"}), 401
+    
+    access_token = create_access_token(identity=user.id)
+    return jsonify(access_token=access_token)
+
+    
+@app.route("/api/register", methods=["POST"])
+def register():
+    """Register user"""
+    username = request.json.get("username")
+    password = request.json.get("password")
+    fullname = request.json.get("fullname")
+    phone = request.json.get("phone")
+    email = request.json.get("email")
+    nationality = request.json.get("nationality")
+   
+    
+    if not username or not password:
+        return jsonify({"error": "Missing password or username."}), 401
+   
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already exists, please sign in!"}), 400
+   
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already exists, please sign in!"}), 400
+   
+    if phone and User.query.filter_by(phone=phone).first():
+        return jsonify({"error": "Phone number already exists, please sign in!"}), 400
+   
+    hashed_password = generate_password_hash(password)
+    new_user = User(
+        username=username, 
+        hash=hashed_password,
+        fullname=fullname,
+        phone=phone,
+        email=email,
+        nationality=nationality
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "User registered successfully!"}), 201
+
+@app.route('/api/auth/google')
+def google_auth():
+    try:
+        # Generate and store a random state
+        state = secrets.token_urlsafe(16)
+        session['oauth_state'] = state
+        redirect_uri = url_for('google_callback', _external=True)
+        # Get the URL as a string instead of Response object
+        auth_url = google.authorize_redirect(redirect_uri, state=state).location
+        return jsonify({"auth_url": auth_url})
+    except Exception as e:
+        print(f"Error in google_auth: {str(e)}")
+        return jsonify({"error": "Failed to generate authentication URL"}), 500
+    
+@app.route('/api/auth/google/callback')
+def google_callback():
+    try:
+        # Verify the state
+        stored_state = session.pop('oauth_state', None)
+        print(f"Stored state: {stored_state}")
+        print(f"Received state: {request.args.get('state')}")
+        
+        if request.args.get('state') != stored_state:
+            raise ValueError("Invalid state parameter")
+
+        token = google.authorize_access_token()
+        userinfo = token.get('userinfo')
+        if userinfo is None:
+            # Fallback to manual userinfo request if not in token
+            resp = google.get('userinfo')
+            userinfo = resp.json()
+
+        # Use sub as the unique identifier
+        google_id = userinfo.get('sub')
+        if not google_id:
+            raise ValueError("No user ID received from Google")
+
+        user = User.query.filter_by(google_id=google_id).first()
+        if not user:
+            user = User(
+                username=userinfo['email'],
+                email=userinfo['email'],
+                google_id=google_id,
+                fullname=userinfo.get('name'),
+                nationality=None
+            )
+            db.session.add(user)
+            db.session.commit()
+        
+        # Create JWT with expiration
+        expires = timedelta(hours=24)
+        access_token = create_access_token(
+            identity=user.id,
+            expires_delta=expires
+        )
+        
+        frontend_url = "https://litekite.vercel.app/login"
+        return redirect(f"{frontend_url}?token={access_token}")
+    except Exception as e:
+        print(f"Error in google_callback: {str(e)}")
+        print(f"Full error details: {repr(e)}")
+        frontend_url = "https://litekite.vercel.app/login"
+        return redirect(f"{frontend_url}?error=1")
 
 @app.route("/api/portfolio")
 @jwt_required()
@@ -311,22 +452,6 @@ def indianstockhistory():
         'time': t.time
     } for t in transactions])
 
-@app.route("/api/login", methods=["POST"])
-def login():
-    """Log user in"""
-    username = request.json.get("username", None)
-    password = request.json.get("password", None)
-    
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 401
-    
-    user = User.query.filter_by(username=username).first()
-    if not user or not check_password_hash(user.hash, password):
-        return jsonify({"error": "Invalid username or password!"}), 401
-    
-    access_token = create_access_token(identity=user.id)
-    return jsonify(access_token=access_token)
-
 @app.route("/api/quote", methods=["POST"])
 def quote():
     """Get stock quote."""
@@ -349,25 +474,6 @@ def indianquote():
     if not stock_qote:
         return jsonify({"error" : "Invalid symbol"}),400
     return jsonify(stock_qote)
-    
-@app.route("/api/register", methods=["POST"])
-def register():
-    """Register user"""
-    username = request.json.get("username")
-    password = request.json.get("password")
-    
-    if not username or not password:
-        return jsonify({"error": "Missing password or username."}), 401
-    
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "Username already exists, please sign in!"}), 400
-    
-    hashed_password = generate_password_hash(password)
-    new_user = User(username=username, hash=hashed_password)
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({"message": "User registered successfully!"}), 201
 
 @app.route("/api/currentstocks",methods=["GET"])
 @jwt_required()
