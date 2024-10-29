@@ -197,5 +197,5 @@ def search_indian_stocks(query: str, limit: int = 10) -> list[dict]:
         ]
         return stocks
     except Exception as e:
-        print(f"Error searching for stocks: {e}")
+        print(f"Error searching for stocks: {e}")   
         return []

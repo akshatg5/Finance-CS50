@@ -19,7 +19,7 @@ import psycopg2
 import json
 
 from .models import db,User,Transaction,IndianStockTransactions
-from .helpers import lookup,usd
+from .helpers import lookup,usd,search_us_stocks
 from .stock import get_stock_data
 from .fundamentals import get_fundamentals_data,get_news_data
 from .indianstocks import get_indian_stock_graph,get_price_for_stock,search_indian_stocks
@@ -661,4 +661,14 @@ def search_stocks() :
     if not query:
         return jsonify({"error" : "Search query is required"}),400
     results = search_indian_stocks(query,limit)
+    return jsonify(results)
+
+@app.route('/api/ussearch',methods=["GET"])
+@jwt_required()
+def search_search_us() :
+    query = request.args.get('q','')
+    limit = request.args.get('limit',10,type=int)
+    if not query:
+        return jsonify( {"Error" : "Search query is required"} )
+    results = search_us_stocks(query,limit)
     return jsonify(results)
