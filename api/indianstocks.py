@@ -173,7 +173,7 @@ def get_price_for_stock(symbol: str):
 
         return {
             'symbol': symbol,
-            'price': str(latest_price),  # Convert to string to match original format
+            'price': f"{latest_price:.2f}",  # Convert to string to match original format
             'date': latest_date
         }
     except Exception as e:
