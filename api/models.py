@@ -12,8 +12,8 @@ class User(db.Model):
     cash = db.Column(db.Float, default=10000.00,nullable=False)
     indiancash = db.Column(db.Float, default=10000.00,nullable=False)
     nationality = db.Column(db.String(100),nullable=True)
-    email = db.Column(db.String(120),unique=True,nullable=True,default="")
-    google_id = db.Column(db.String(255),unique=True,nullable=True,default="")
+    email = db.Column(db.String(120),unique=True,nullable=True,default=None)
+    google_id = db.Column(db.String(255),unique=True,nullable=True,default=None)
     
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)

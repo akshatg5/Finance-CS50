@@ -132,7 +132,7 @@ def register():
     password = request.json.get("password")
     fullname = request.json.get("fullname")
     phone = request.json.get("phone")
-    email = request.json.get("email")
+    email = request.json.get("email") or None
     nationality = request.json.get("nationality")
    
     
