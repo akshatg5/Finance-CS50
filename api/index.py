@@ -579,7 +579,7 @@ def sell_indian_stock():
     total_price = round(price * shares, 2)
     
     # Update user's cash
-    user.cash = round(user.cash + total_price, 2)
+    user.indiancash = round(user.indiancash + total_price, 2)
     
     new_transaction = IndianStockTransactions(
         user_id=user_id,
