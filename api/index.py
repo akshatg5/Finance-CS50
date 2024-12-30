@@ -230,39 +230,47 @@ def google_callback():
 @jwt_required()
 def index():
     """Show portfolio of stocks"""
-    user_id = get_jwt_identity()
-    
-    stocks = db.session.query(
-        Transaction.ticker,
-        Transaction.name,
-        db.func.sum(Transaction.shares).label('totalshares'),
-        db.func.sum(Transaction.shares * Transaction.price).label('total_cost')
-    ).filter_by(user_id=user_id)\
-        .group_by(Transaction.ticker,Transaction.name)\
-            .having(db.func.sum(Transaction.shares) > 0)\
-                .all()
-    
-    user = User.query.get(user_id)
-    cash = user.cash
-    total = cash
+    try : 
+        user_id = get_jwt_identity()
+        if not user_id:
+            return jsonify({"error" : "Invalid user token,please sign in again!"}),401
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        stocks = db.session.query(
+            Transaction.ticker,
+            Transaction.name,
+            db.func.sum(Transaction.shares).label('totalshares'),
+            db.func.sum(Transaction.shares * Transaction.price).label('total_cost')
+        ).filter_by(user_id=user_id)\
+            .group_by(Transaction.ticker,Transaction.name)\
+                .having(db.func.sum(Transaction.shares) > 0)\
+                    .all()
+        
+        user = User.query.get(user_id)
+        cash = user.cash
+        total = cash
 
-    stocks_list = []
-    for stock in stocks:
-        current_price = lookup(stock.ticker)['price'] if lookup(stock.ticker) else 0
-        avg_purchase_price = stock.total_cost / stock.totalshares if stock.totalshares > 0 else 0
-        current_value = current_price * stock.totalshares
-        stock_dict = {
-            'ticker': stock.ticker,
-            'name': stock.name,
-            'current_price': current_price,
-            'avg_purcase_price' : avg_purchase_price,
-            'totalshares': stock.totalshares,
-            'current_value': current_value
-        }
-        total += current_value
-        stocks_list.append(stock_dict)
+        stocks_list = []
+        for stock in stocks:
+            current_price = lookup(stock.ticker)['price'] if lookup(stock.ticker) else 0
+            avg_purchase_price = stock.total_cost / stock.totalshares if stock.totalshares > 0 else 0
+            current_value = current_price * stock.totalshares
+            stock_dict = {
+                'ticker': stock.ticker,
+                'name': stock.name,
+                'current_price': current_price,
+                'avg_purcase_price' : avg_purchase_price,
+                'totalshares': stock.totalshares,
+                'current_value': current_value
+            }
+            total += current_value
+            stocks_list.append(stock_dict)
 
-    return jsonify({"stocks": stocks_list, "cash": cash, "total": total})
+        return jsonify({"stocks": stocks_list, "cash": cash, "total": total})
+    except Exception as e :
+        return jsonify({"error" : str(e)}),500
 
 @app.route("/api/indianportfolio", methods=["GET"])
 @jwt_required()
